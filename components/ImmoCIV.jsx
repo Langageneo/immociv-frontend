@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 /* ═══════════════════════════════════════════════════════════
    API CONFIG
@@ -64,9 +64,6 @@ const ADMIN = {
   toggleUser: (id) => api(`/admin/users/${id}/toggle`, { method: "PATCH" }),
 };
 
-/* ═══════════════════════════════════════════════════════════
-   CONSTANTES
-═══════════════════════════════════════════════════════════ */
 const TM = {
   maison:      { icon: "🏠", label: "Maison",      color: "#D97706", bg: "linear-gradient(135deg,#FEF3C7,#FDE68A)" },
   appartement: { icon: "🏢", label: "Appartement", color: "#0369A1", bg: "linear-gradient(135deg,#DBEAFE,#BFDBFE)" },
@@ -83,17 +80,17 @@ const fmt = (p, t) => {
    ROOT
 ═══════════════════════════════════════════════════════════ */
 export default function ImmoCIV() {
-  const [screen,  setScreen]  = useState("home");
-  const [modal,   setModal]   = useState(null);
-  const [user,    setUser]    = useState(null);
+  const [screen,   setScreen]   = useState("home");
+  const [modal,    setModal]    = useState(null);
+  const [user,     setUser]     = useState(null);
   const [selected, setSelected] = useState(null);
-  const [toast,   setToast]   = useState(null);
-  const [props,   setProps]   = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [fType,   setFType]   = useState("");
-  const [fListing,setFListing]= useState("");
-  const [fLoc,    setFLoc]    = useState("");
-  const [fBudget, setFBudget] = useState("");
+  const [toast,    setToast]    = useState(null);
+  const [props,    setProps]    = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [fType,    setFType]    = useState("");
+  const [fListing, setFListing] = useState("");
+  const [fLoc,     setFLoc]     = useState("");
+  const [fBudget,  setFBudget]  = useState("");
 
   useEffect(() => {
     if (!document.getElementById("icv-font")) {
@@ -109,7 +106,10 @@ export default function ImmoCIV() {
     AUTH.me().then((d) => setUser(d.user)).catch(() => dropToken());
   }, []);
 
-  const toast$ = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
+  const toast$ = useCallback((msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2800);
+  }, []);
 
   const loadProps = useCallback(async (ov = {}) => {
     setLoading(true);
@@ -126,15 +126,15 @@ export default function ImmoCIV() {
     } finally {
       setLoading(false);
     }
-  }, [fType, fListing, fLoc, fBudget]);
+  }, [fType, fListing, fLoc, fBudget, toast$]);
 
-  const goSearch = (type = "") => {
+  const goSearch = useCallback((type = "") => {
     setFType(type);
     setScreen("results");
     loadProps({ type });
-  };
+  }, [loadProps]);
 
-  const goDetail = async (prop) => {
+  const goDetail = useCallback(async (prop) => {
     try {
       const d = await PROPS.byId(prop._id);
       setSelected(d.property);
@@ -142,29 +142,26 @@ export default function ImmoCIV() {
       setSelected(prop);
     }
     setScreen("detail");
-  };
+  }, []);
 
-  const logout = () => { AUTH.logout(); setUser(null); toast$("Déconnecté"); };
+  const logout = useCallback(() => {
+    AUTH.logout();
+    setUser(null);
+    toast$("Déconnecté");
+  }, [toast$]);
 
   return (
     <>
       <style>{CSS}</style>
       <div className="app">
-        {screen === "home"   && <Home    user={user} setModal={setModal} logout={logout} goSearch={goSearch} setScreen={setScreen} />}
-        {screen === "results"&& <Results props={props} loading={loading} fType={fType} setFType={setFType} fListing={fListing} setFListing={setFListing} fLoc={fLoc} setFLoc={setFLoc} fBudget={fBudget} setFBudget={setFBudget} loadProps={loadProps} goDetail={goDetail} goBack={() => setScreen("home")} />}
-        {screen === "detail" && <Detail  prop={selected} goBack={() => setScreen("results")} />}
-        {screen === "admin"  && <Admin   goBack={() => setScreen("home")} toast$={toast$} />}
+        {screen === "home"    && <HomeScreen    user={user} setModal={setModal} logout={logout} goSearch={goSearch} setScreen={setScreen} />}
+        {screen === "results" && <ResultsScreen props={props} loading={loading} fType={fType} setFType={setFType} fListing={fListing} setFListing={setFListing} fLoc={fLoc} setFLoc={setFLoc} fBudget={fBudget} setFBudget={setFBudget} loadProps={loadProps} goDetail={goDetail} goBack={() => setScreen("home")} />}
+        {screen === "detail"  && <DetailScreen  prop={selected} goBack={() => setScreen("results")} />}
+        {screen === "admin"   && <AdminScreen   goBack={() => setScreen("home")} toast$={toast$} />}
 
-        {modal && (
-          <Sheet onClose={() => setModal(null)}>
-            {(modal === "login" || modal === "register") && (
-              <AuthSheet mode={modal} setMode={setModal} setUser={setUser} onClose={() => setModal(null)} toast$={toast$} />
-            )}
-            {modal === "publish" && (
-              <PublishSheet user={user} onClose={() => setModal(null)} onDone={() => { toast$("✅ Annonce publiée !"); if (screen === "results") loadProps(); }} toast$={toast$} />
-            )}
-          </Sheet>
-        )}
+        {modal === "login"    && <Sheet onClose={() => setModal(null)}><AuthSheet    mode="login"    setMode={setModal} setUser={setUser} onClose={() => setModal(null)} toast$={toast$} /></Sheet>}
+        {modal === "register" && <Sheet onClose={() => setModal(null)}><AuthSheet    mode="register" setMode={setModal} setUser={setUser} onClose={() => setModal(null)} toast$={toast$} /></Sheet>}
+        {modal === "publish"  && <Sheet onClose={() => setModal(null)}><PublishSheet user={user} onClose={() => setModal(null)} onDone={() => { toast$("✅ Annonce publiée !"); if (screen === "results") loadProps(); }} toast$={toast$} /></Sheet>}
 
         {(screen === "home" || screen === "results") && (
           <button className="fab" onClick={() => user ? setModal("publish") : setModal("login")}>
@@ -182,7 +179,7 @@ export default function ImmoCIV() {
 /* ═══════════════════════════════════════════════════════════
    HOME
 ═══════════════════════════════════════════════════════════ */
-function Home({ user, setModal, logout, goSearch, setScreen }) {
+function HomeScreen({ user, setModal, logout, goSearch, setScreen }) {
   return (
     <div className="screen">
       <nav className="nav">
@@ -226,7 +223,11 @@ function Home({ user, setModal, logout, goSearch, setScreen }) {
       <div className="section">
         <div className="section-title">Comment ça marche ?</div>
         <div className="steps">
-          {[["1","Choisis le type de bien","Maison, appartement ou terrain"],["2","Filtre par budget et quartier","Affine ta recherche"],["3","Contacte via WhatsApp","Direct, sans intermédiaire"]].map(([n,t,s]) => (
+          {[
+            ["1","Choisis le type de bien","Maison, appartement ou terrain"],
+            ["2","Filtre par budget et quartier","Affine ta recherche"],
+            ["3","Contacte via WhatsApp","Direct, sans intermédiaire"],
+          ].map(([n,t,s]) => (
             <div key={n} className="step">
               <div className="step-num">{n}</div>
               <div><div className="step-title">{t}</div><div className="step-sub">{s}</div></div>
@@ -249,9 +250,21 @@ function Home({ user, setModal, logout, goSearch, setScreen }) {
 /* ═══════════════════════════════════════════════════════════
    RESULTS
 ═══════════════════════════════════════════════════════════ */
-function Results({ props, loading, fType, setFType, fListing, setFListing, fLoc, setFLoc, fBudget, setFBudget, loadProps, goDetail, goBack }) {
-  const search = () => loadProps();
-  const clear  = () => { setFType(""); setFListing(""); setFLoc(""); setFBudget(""); loadProps({ type:"", listing:"", loc:"", budget:"" }); };
+function ResultsScreen({ props, loading, fType, setFType, fListing, setFListing, fLoc, setFLoc, fBudget, setFBudget, loadProps, goDetail, goBack }) {
+  const locRef    = useRef(null);
+  const budgetRef = useRef(null);
+
+  const search = () => loadProps({
+    loc:    locRef.current?.value    || fLoc,
+    budget: budgetRef.current?.value || fBudget,
+  });
+
+  const clear = () => {
+    setFType(""); setFListing(""); setFLoc(""); setFBudget("");
+    if (locRef.current)    locRef.current.value    = "";
+    if (budgetRef.current) budgetRef.current.value = "";
+    loadProps({ type:"", listing:"", loc:"", budget:"" });
+  };
 
   return (
     <div className="screen">
@@ -264,11 +277,20 @@ function Results({ props, loading, fType, setFType, fListing, setFListing, fLoc,
       <div className="filter-bar">
         <div className="type-pills">
           {[["","🔍 Tout"],["maison","🏠 Maison"],["appartement","🏢 Appart."],["terrain","🌿 Terrain"]].map(([v,l]) => (
-            <button key={v} className={`type-pill${fType===v?" active":""}`} onClick={() => { setFType(v); loadProps({ type: v }); }}>{l}</button>
+            <button key={v} className={`type-pill${fType===v?" active":""}`}
+              onClick={() => { setFType(v); loadProps({ type: v }); }}>{l}
+            </button>
           ))}
         </div>
         <div className="frow">
-          <input className="finput" placeholder="📍 Quartier ou ville..." value={fLoc} onChange={e => setFLoc(e.target.value)} onKeyDown={e => e.key==="Enter"&&search()} />
+          <input
+            className="finput"
+            placeholder="📍 Quartier ou ville..."
+            defaultValue={fLoc}
+            ref={locRef}
+            onBlur={e => setFLoc(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && search()}
+          />
           <select className="fselect" value={fListing} onChange={e => { setFListing(e.target.value); loadProps({ listing: e.target.value }); }}>
             <option value="">Vente & Location</option>
             <option value="vente">À Vendre</option>
@@ -276,7 +298,15 @@ function Results({ props, loading, fType, setFType, fListing, setFListing, fLoc,
           </select>
         </div>
         <div className="frow">
-          <input className="finput" type="number" placeholder="💰 Budget max (FCFA)" value={fBudget} onChange={e => setFBudget(e.target.value)} onKeyDown={e => e.key==="Enter"&&search()} />
+          <input
+            className="finput"
+            type="number"
+            placeholder="💰 Budget max (FCFA)"
+            defaultValue={fBudget}
+            ref={budgetRef}
+            onBlur={e => setFBudget(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && search()}
+          />
           <button className="search-btn" onClick={search}>Chercher</button>
           {(fType||fListing||fLoc||fBudget) && <button className="clear-btn" onClick={clear}>✕</button>}
         </div>
@@ -296,7 +326,7 @@ function Results({ props, loading, fType, setFType, fListing, setFListing, fLoc,
 /* ═══════════════════════════════════════════════════════════
    DETAIL
 ═══════════════════════════════════════════════════════════ */
-function Detail({ prop: p, goBack }) {
+function DetailScreen({ prop: p, goBack }) {
   if (!p) return null;
   const m = TM[p.type] || TM.maison;
   const wa = `https://wa.me/${p.contactPhone}?text=${encodeURIComponent(`Bonjour, je suis intéressé par : ${p.title} — ${p.location}`)}`;
@@ -359,7 +389,7 @@ function Detail({ prop: p, goBack }) {
 /* ═══════════════════════════════════════════════════════════
    ADMIN
 ═══════════════════════════════════════════════════════════ */
-function Admin({ goBack, toast$ }) {
+function AdminScreen({ goBack, toast$ }) {
   const [stats, setStats] = useState(null);
   const [list,  setList]  = useState([]);
   const [busy,  setBusy]  = useState(true);
@@ -369,7 +399,7 @@ function Admin({ goBack, toast$ }) {
       .then(([s, p]) => { setStats(s); setList(p.properties || []); })
       .catch(e => toast$("❌ " + e.message))
       .finally(() => setBusy(false));
-  }, []);
+  }, [toast$]);
 
   const toggle = async (id) => {
     try {
@@ -483,21 +513,31 @@ function Sheet({ children, onClose }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   AUTH SHEET
+   AUTH SHEET — fix clavier : useRef + pas de re-render
 ═══════════════════════════════════════════════════════════ */
 function AuthSheet({ mode, setMode, setUser, onClose, toast$ }) {
-  const [form, setForm]   = useState({});
-  const [busy, setBusy]   = useState(false);
+  const [busy, setBusy] = useState(false);
   const isLogin = mode === "login";
 
+  const nameRef     = useRef(null);
+  const emailRef    = useRef(null);
+  const passwordRef = useRef(null);
+  const waRef       = useRef(null);
+
   const handle = async () => {
-    if (!form.email || !form.password) { toast$("⚠️ Email et mot de passe requis"); return; }
-    if (!isLogin && (!form.name || !form.whatsapp)) { toast$("⚠️ Tous les champs sont requis"); return; }
+    const email    = emailRef.current?.value    || "";
+    const password = passwordRef.current?.value || "";
+    const name     = nameRef.current?.value     || "";
+    const whatsapp = waRef.current?.value       || "";
+
+    if (!email || !password) { toast$("⚠️ Email et mot de passe requis"); return; }
+    if (!isLogin && (!name || !whatsapp)) { toast$("⚠️ Tous les champs sont requis"); return; }
+
     setBusy(true);
     try {
       const d = isLogin
-        ? await AUTH.login({ email: form.email, password: form.password })
-        : await AUTH.register({ name: form.name, email: form.email, password: form.password, whatsapp: form.whatsapp });
+        ? await AUTH.login({ email, password })
+        : await AUTH.register({ name, email, password, whatsapp });
       setUser(d.user);
       onClose();
       toast$(`✅ Bienvenue ${d.user.name.split(" ")[0]} !`);
@@ -508,40 +548,57 @@ function AuthSheet({ mode, setMode, setUser, onClose, toast$ }) {
     }
   };
 
-  const I = ({ label, name, type="text", placeholder, req }) => (
-    <div className="fg">
-      <label className="fl">{label}{req&&<span style={{color:"#E86A2E"}}> *</span>}</label>
-      <input className="fi" type={type} placeholder={placeholder} value={form[name]||""}
-        onChange={e=>setForm({...form,[name]:e.target.value})} onKeyDown={e=>e.key==="Enter"&&handle()} />
-    </div>
-  );
-
-  return (<>
-    <div className="sheet-title">{isLogin?"Se connecter":"Créer un compte"}</div>
-    {!isLogin && <I label="Nom complet" name="name" placeholder="Kouame Jean" req />}
-    <I label="Email" name="email" type="email" placeholder="email@exemple.com" req />
-    <I label="Mot de passe" name="password" type="password" placeholder="••••••••" req />
-    {!isLogin && <I label="WhatsApp" name="whatsapp" placeholder="2250700000000" req />}
-    <button className="btn-submit" onClick={handle} disabled={busy}>
-      {busy?"⏳ Chargement...":isLogin?"Se connecter":"Créer mon compte"}
-    </button>
-    <div className="sheet-switch">
-      {isLogin?"Pas de compte ? ":"Déjà un compte ? "}
-      <button className="link-btn" onClick={()=>{setForm({});setMode(isLogin?"register":"login");}}>
-        {isLogin?"S'inscrire":"Se connecter"}
+  return (
+    <>
+      <div className="sheet-title">{isLogin ? "Se connecter" : "Créer un compte"}</div>
+      {!isLogin && (
+        <div className="fg">
+          <label className="fl">Nom complet <span style={{color:"#E86A2E"}}>*</span></label>
+          <input className="fi" type="text" placeholder="Kouame Jean" ref={nameRef} />
+        </div>
+      )}
+      <div className="fg">
+        <label className="fl">Email <span style={{color:"#E86A2E"}}>*</span></label>
+        <input className="fi" type="email" placeholder="email@exemple.com" ref={emailRef} />
+      </div>
+      <div className="fg">
+        <label className="fl">Mot de passe <span style={{color:"#E86A2E"}}>*</span></label>
+        <input className="fi" type="password" placeholder="••••••••" ref={passwordRef} onKeyDown={e => e.key==="Enter"&&handle()} />
+      </div>
+      {!isLogin && (
+        <div className="fg">
+          <label className="fl">WhatsApp <span style={{color:"#E86A2E"}}>*</span></label>
+          <input className="fi" type="text" placeholder="2250700000000" ref={waRef} />
+        </div>
+      )}
+      <button className="btn-submit" onClick={handle} disabled={busy}>
+        {busy ? "⏳ Chargement..." : isLogin ? "Se connecter" : "Créer mon compte"}
       </button>
-    </div>
-  </>);
+      <div className="sheet-switch">
+        {isLogin ? "Pas de compte ? " : "Déjà un compte ? "}
+        <button className="link-btn" onClick={() => setMode(isLogin ? "register" : "login")}>
+          {isLogin ? "S'inscrire" : "Se connecter"}
+        </button>
+      </div>
+    </>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════
-   PUBLISH SHEET
+   PUBLISH SHEET — fix clavier : useRef
 ═══════════════════════════════════════════════════════════ */
 function PublishSheet({ user, onClose, onDone, toast$ }) {
-  const [form,    setForm]    = useState({ listingType: "vente" });
-  const [files,   setFiles]   = useState([]);
-  const [preview, setPreview] = useState([]);
-  const [busy,    setBusy]    = useState(false);
+  const [type,        setType]        = useState("");
+  const [listingType, setListingType] = useState("vente");
+  const [files,       setFiles]       = useState([]);
+  const [preview,     setPreview]     = useState([]);
+  const [busy,        setBusy]        = useState(false);
+
+  const titleRef    = useRef(null);
+  const priceRef    = useRef(null);
+  const locationRef = useRef(null);
+  const descRef     = useRef(null);
+  const phoneRef    = useRef(null);
 
   const onFiles = (e) => {
     const sel = Array.from(e.target.files).slice(0, 6);
@@ -550,19 +607,26 @@ function PublishSheet({ user, onClose, onDone, toast$ }) {
   };
 
   const handle = async () => {
-    if (!form.title||!form.type||!form.price||!form.location) {
-      toast$("⚠️ Remplis les champs obligatoires"); return;
+    const title       = titleRef.current?.value    || "";
+    const price       = priceRef.current?.value    || "";
+    const location    = locationRef.current?.value || "";
+    const description = descRef.current?.value     || "";
+    const contactPhone= phoneRef.current?.value    || user?.whatsapp || "";
+
+    if (!title || !type || !price || !location) {
+      toast$("⚠️ Remplis les champs obligatoires");
+      return;
     }
     setBusy(true);
     try {
       const fd = new FormData();
-      fd.append("title",       form.title);
-      fd.append("type",        form.type);
-      fd.append("listingType", form.listingType);
-      fd.append("price",       form.price);
-      fd.append("location",    form.location);
-      fd.append("description", form.description || "");
-      fd.append("contactPhone",form.contactPhone || user?.whatsapp || "");
+      fd.append("title",        title);
+      fd.append("type",         type);
+      fd.append("listingType",  listingType);
+      fd.append("price",        price);
+      fd.append("location",     location);
+      fd.append("description",  description);
+      fd.append("contactPhone", contactPhone);
       files.forEach(f => fd.append("images", f));
       await PROPS.create(fd);
       onDone();
@@ -574,61 +638,75 @@ function PublishSheet({ user, onClose, onDone, toast$ }) {
     }
   };
 
-  const I = ({ label, name, type="text", placeholder, req }) => (
-    <div className="fg">
-      <label className="fl">{label}{req&&<span style={{color:"#E86A2E"}}> *</span>}</label>
-      <input className="fi" type={type} placeholder={placeholder} value={form[name]||""}
-        onChange={e=>setForm({...form,[name]:e.target.value})} />
-    </div>
-  );
+  return (
+    <>
+      <div className="sheet-title">📢 Publier une annonce</div>
 
-  return (<>
-    <div className="sheet-title">📢 Publier une annonce</div>
-    <I label="Titre" name="title" placeholder="Villa moderne à Cocody..." req />
-    <div style={{display:"flex",gap:10}}>
-      <div className="fg" style={{flex:1}}>
-        <label className="fl">Type <span style={{color:"#E86A2E"}}>*</span></label>
-        <select className="fs" value={form.type||""} onChange={e=>setForm({...form,type:e.target.value})}>
-          <option value="">Choisir...</option>
-          <option value="maison">🏠 Maison</option>
-          <option value="appartement">🏢 Appartement</option>
-          <option value="terrain">🌿 Terrain</option>
-        </select>
+      <div className="fg">
+        <label className="fl">Titre <span style={{color:"#E86A2E"}}>*</span></label>
+        <input className="fi" type="text" placeholder="Villa moderne à Cocody..." ref={titleRef} />
       </div>
-      <div className="fg" style={{flex:1}}>
-        <label className="fl">Transaction</label>
-        <select className="fs" value={form.listingType} onChange={e=>setForm({...form,listingType:e.target.value})}>
-          <option value="vente">Vente</option>
-          <option value="location">Location</option>
-        </select>
-      </div>
-    </div>
-    <I label="Prix (FCFA)" name="price" type="number" placeholder="ex: 45000000" req />
-    <I label="Localisation" name="location" placeholder="Cocody, Abidjan" req />
-    <div className="fg">
-      <label className="fl">Description</label>
-      <textarea className="fta" placeholder="Superficie, état, équipements..." value={form.description||""} onChange={e=>setForm({...form,description:e.target.value})} />
-    </div>
-    <I label="Numéro WhatsApp contact" name="contactPhone" placeholder="2250700000000" />
-    <div className="fg">
-      <label className="fl">Photos (max 6)</label>
-      <label className="upload-zone">
-        <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={onFiles} />
-        <span style={{fontSize:24}}>📷</span>
-        <span style={{fontSize:13,color:"#999",marginTop:4}}>
-          {files.length>0?`${files.length} photo(s) sélectionnée(s)`:"Appuie pour ajouter des photos"}
-        </span>
-      </label>
-      {preview.length>0 && (
-        <div className="preview-strip">
-          {preview.map((url,i)=><img key={i} src={url} alt="" className="preview-thumb" />)}
+
+      <div style={{display:"flex",gap:10}}>
+        <div className="fg" style={{flex:1}}>
+          <label className="fl">Type <span style={{color:"#E86A2E"}}>*</span></label>
+          <select className="fs" value={type} onChange={e => setType(e.target.value)}>
+            <option value="">Choisir...</option>
+            <option value="maison">🏠 Maison</option>
+            <option value="appartement">🏢 Appartement</option>
+            <option value="terrain">🌿 Terrain</option>
+          </select>
         </div>
-      )}
-    </div>
-    <button className="btn-submit" onClick={handle} disabled={busy}>
-      {busy?"⏳ Publication en cours...":"📢 Publier maintenant"}
-    </button>
-  </>);
+        <div className="fg" style={{flex:1}}>
+          <label className="fl">Transaction</label>
+          <select className="fs" value={listingType} onChange={e => setListingType(e.target.value)}>
+            <option value="vente">Vente</option>
+            <option value="location">Location</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="fg">
+        <label className="fl">Prix (FCFA) <span style={{color:"#E86A2E"}}>*</span></label>
+        <input className="fi" type="number" placeholder="ex: 45000000" ref={priceRef} />
+      </div>
+
+      <div className="fg">
+        <label className="fl">Localisation <span style={{color:"#E86A2E"}}>*</span></label>
+        <input className="fi" type="text" placeholder="Cocody, Abidjan" ref={locationRef} />
+      </div>
+
+      <div className="fg">
+        <label className="fl">Description</label>
+        <textarea className="fta" placeholder="Superficie, état, équipements..." ref={descRef} />
+      </div>
+
+      <div className="fg">
+        <label className="fl">WhatsApp contact</label>
+        <input className="fi" type="text" placeholder="2250700000000" ref={phoneRef} defaultValue={user?.whatsapp || ""} />
+      </div>
+
+      <div className="fg">
+        <label className="fl">Photos (max 6)</label>
+        <label className="upload-zone">
+          <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={onFiles} />
+          <span style={{fontSize:24}}>📷</span>
+          <span style={{fontSize:13,color:"#999",marginTop:4}}>
+            {files.length > 0 ? `${files.length} photo(s) sélectionnée(s)` : "Appuie pour ajouter des photos"}
+          </span>
+        </label>
+        {preview.length > 0 && (
+          <div className="preview-strip">
+            {preview.map((url,i) => <img key={i} src={url} alt="" className="preview-thumb" />)}
+          </div>
+        )}
+      </div>
+
+      <button className="btn-submit" onClick={handle} disabled={busy}>
+        {busy ? "⏳ Publication en cours..." : "📢 Publier maintenant"}
+      </button>
+    </>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════
